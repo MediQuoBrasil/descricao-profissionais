@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Encontre o profissional de saúde ideal para você. Conheça nossos especialistas em diversas áreas.">
+  <title>Nossos Profissionais — Saúde</title>
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Nunito+Sans:ital,opsz,wght@0,6..12,400;0,6..12,600;1,6..12,400&display=swap" rel="stylesheet">
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="css/common.css">
+  <link rel="stylesheet" href="css/public.css">
+
+  <!-- Favicon (purple heart - health) -->
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💜</text></svg>">
+</head>
+<body>
+
+  <div class="app-container">
+
+    <!-- ═══ Header ═══ -->
+    <header class="app-header">
+      <div class="header-top">
+        <div class="brand">
+          <div class="brand-icon" aria-hidden="true">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+            </svg>
+          </div>
+          <span class="brand-text">Nossos Profissionais</span>
+        </div>
+
+        <button id="themeToggle" class="theme-toggle" title="Alternar tema" aria-label="Alternar entre tema claro e escuro">
+          <svg id="iconMoon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+          </svg>
+          <svg id="iconSun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Busca -->
+      <div class="search-wrapper">
+        <input
+          id="searchInput"
+          class="search-input"
+          type="search"
+          placeholder="Buscar por nome, área, especialidade…"
+          autocomplete="off"
+          aria-label="Buscar profissional"
+        >
+        <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+        <button id="searchClear" class="search-clear" aria-label="Limpar busca">✕</button>
+      </div>
+
+      <!-- Filtros -->
+      <div class="filters-bar">
+        <button id="filterToggleBtn" class="filter-toggle-btn" aria-expanded="false" aria-controls="filterDropdown">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
+          </svg>
+          <span class="filter-btn-label">Filtrar</span>
+        </button>
+        <span id="resultsCount" class="results-count" aria-live="polite"></span>
+      </div>
+
+      <!-- Dropdown de filtros -->
+      <div id="filterDropdown" class="filter-dropdown hidden" role="group" aria-label="Filtrar por área de atuação">
+        <div class="filter-actions">
+          <button id="filterSelectAll" class="filter-action-btn">Marcar todos</button>
+          <button id="filterDeselectAll" class="filter-action-btn">Desmarcar todos</button>
+        </div>
+        <div id="filterOptions" class="filter-options">
+          <!-- Opções de filtro são geradas via JS -->
+        </div>
+      </div>
+    </header>
+
+    <!-- ═══ Conteúdo ═══ -->
+    <main>
+      <!-- Loading -->
+      <div id="loadingState" class="loading-state hidden">
+        <div class="spinner spinner-dark"></div>
+        <span>Carregando profissionais…</span>
+      </div>
+
+      <!-- Empty -->
+      <div id="emptyState" class="empty-state hidden">
+        <div class="empty-icon" aria-hidden="true">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/>
+          </svg>
+        </div>
+        <p class="empty-title">Nenhum profissional encontrado</p>
+        <p class="empty-text">Tente ajustar os filtros ou o termo de busca.</p>
+      </div>
+
+      <!-- Grid -->
+      <div id="professionalsGrid" class="professionals-grid">
+        <!-- Cards gerados via JS -->
+      </div>
+    </main>
+
+    <!-- ═══ Footer ═══ -->
+    <footer class="app-footer">
+      <span>© 2026 — Profissionais de Saúde</span>
+    </footer>
+
+  </div>
+
+  <!-- Scripts -->
+  <script src="js/config.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/public.js"></script>
+
+</body>
+</html>
