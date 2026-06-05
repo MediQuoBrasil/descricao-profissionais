@@ -1,0 +1,460 @@
+/**
+ * ═══════════════════════════════════════════════════════════
+ *  public.js — Lógica da visualização pública
+ * ═══════════════════════════════════════════════════════════
+ *
+ *  Responsabilidades:
+ *    - Buscar profissionais da API
+ *    - Renderizar cards
+ *    - Filtrar por área (checkboxes)
+ *    - Buscar por texto (nome, área, tags, descrição)
+ *    - Toggle de tema claro/escuro
+ */
+
+(() => {
+  'use strict';
+
+  // ─── Estado ─────────────────────────────────────────────
+
+  /** @type {{ profissionais: Array<Object>, areas: Object, filters: Set<string>, searchTerm: string }} */
+  const state = {
+    profissionais: [],
+    areas: {},
+    filters: new Set(),
+    searchTerm: '',
+    filterOpen: false,
+  };
+
+  // ─── DOM ────────────────────────────────────────────────
+
+  const $ = (sel) => document.querySelector(sel);
+  const $$ = (sel) => document.querySelectorAll(sel);
+
+  const dom = {
+    grid: $('#professionalsGrid'),
+    searchInput: $('#searchInput'),
+    searchClear: $('#searchClear'),
+    filterToggle: $('#filterToggleBtn'),
+    filterDropdown: $('#filterDropdown'),
+    filterOptions: $('#filterOptions'),
+    filterSelectAll: $('#filterSelectAll'),
+    filterDeselectAll: $('#filterDeselectAll'),
+    resultsCount: $('#resultsCount'),
+    themeToggle: $('#themeToggle'),
+    loadingState: $('#loadingState'),
+    emptyState: $('#emptyState'),
+  };
+
+  // ─── Tema ───────────────────────────────────────────────
+
+  const initTheme = () => {
+    const saved = localStorage.getItem('theme');
+    const theme = (saved === 'light' || saved === 'dark') ? saved : 'light';
+    document.documentElement.setAttribute('data-theme', theme);
+    updateThemeIcon(theme);
+  };
+
+  const toggleTheme = () => {
+    const current = document.documentElement.getAttribute('data-theme') || 'light';
+    const next = current === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    try { localStorage.setItem('theme', next); } catch { /* ok */ }
+    updateThemeIcon(next);
+  };
+
+  /** @param {string} theme */
+  const updateThemeIcon = (theme) => {
+    const moon = $('#iconMoon');
+    const sun = $('#iconSun');
+    if (moon) moon.style.display = theme === 'dark' ? 'block' : 'none';
+    if (sun) sun.style.display = theme === 'light' ? 'block' : 'none';
+  };
+
+  // ─── Toast ──────────────────────────────────────────────
+
+  /** @type {number|null} */
+  let toastTimer = null;
+
+  /**
+   * Exibe um toast temporário.
+   * @param {string} msg - Mensagem.
+   * @param {'success'|'error'|''} [type=''] - Tipo visual.
+   */
+  const showToast = (msg, type = '') => {
+    const existing = document.querySelector('.toast');
+    if (existing) existing.remove();
+
+    const el = document.createElement('div');
+    el.className = `toast${type ? ` toast-${type}` : ''}`;
+    el.textContent = msg;
+    document.body.appendChild(el);
+
+    requestAnimationFrame(() => { el.classList.add('show'); });
+
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => {
+      el.classList.remove('show');
+      setTimeout(() => { el.remove(); }, 400);
+    }, 4000);
+  };
+
+  // ─── Filtros ────────────────────────────────────────────
+
+  const buildFilterOptions = () => {
+    if (!dom.filterOptions) return;
+    dom.filterOptions.innerHTML = '';
+
+    const areas = Object.entries(state.areas);
+    areas.forEach(([name, config]) => {
+      const option = document.createElement('label');
+      option.className = `filter-option${state.filters.has(name) ? ' checked' : ''}`;
+      option.dataset.area = name;
+
+      option.innerHTML = `
+        <span class="filter-checkbox"></span>
+        <span class="filter-area-dot" style="background:${config.color}"></span>
+        <span class="filter-area-name">${name}</span>
+      `;
+
+      option.addEventListener('click', () => {
+        if (state.filters.has(name)) {
+          state.filters.delete(name);
+          option.classList.remove('checked');
+        } else {
+          state.filters.add(name);
+          option.classList.add('checked');
+        }
+        updateFilterBtnState();
+        renderCards();
+      });
+
+      dom.filterOptions.appendChild(option);
+    });
+  };
+
+  const selectAllFilters = () => {
+    Object.keys(state.areas).forEach((name) => state.filters.add(name));
+    $$('.filter-option').forEach((el) => el.classList.add('checked'));
+    updateFilterBtnState();
+    renderCards();
+  };
+
+  const deselectAllFilters = () => {
+    state.filters.clear();
+    $$('.filter-option').forEach((el) => el.classList.remove('checked'));
+    updateFilterBtnState();
+    renderCards();
+  };
+
+  const updateFilterBtnState = () => {
+    if (!dom.filterToggle) return;
+    const totalAreas = Object.keys(state.areas).length;
+    const selected = state.filters.size;
+    const isFiltering = selected > 0 && selected < totalAreas;
+
+    dom.filterToggle.classList.toggle('has-filter', isFiltering);
+
+    const label = dom.filterToggle.querySelector('.filter-btn-label');
+    if (label) {
+      label.textContent = isFiltering ? `Filtros (${selected})` : 'Filtrar';
+    }
+  };
+
+  const toggleFilterDropdown = () => {
+    state.filterOpen = !state.filterOpen;
+    if (dom.filterDropdown) {
+      dom.filterDropdown.classList.toggle('hidden', !state.filterOpen);
+    }
+  };
+
+  // ─── Busca ──────────────────────────────────────────────
+
+  const handleSearch = () => {
+    state.searchTerm = (dom.searchInput?.value || '').trim().toLowerCase();
+    if (dom.searchClear) {
+      dom.searchClear.classList.toggle('visible', state.searchTerm.length > 0);
+    }
+    renderCards();
+  };
+
+  const clearSearch = () => {
+    if (dom.searchInput) dom.searchInput.value = '';
+    state.searchTerm = '';
+    if (dom.searchClear) dom.searchClear.classList.remove('visible');
+    renderCards();
+  };
+
+  // ─── Filtragem ──────────────────────────────────────────
+
+  /**
+   * Filtra profissionais por áreas selecionadas e termo de busca.
+   * @returns {Array<Object>} Profissionais filtrados.
+   */
+  const getFilteredProfissionais = () => {
+    let list = state.profissionais;
+
+    // Filtro por área (se nenhuma selecionada, mostra todas)
+    if (state.filters.size > 0) {
+      list = list.filter((p) => state.filters.has(p.area));
+    }
+
+    // Filtro por busca
+    if (state.searchTerm) {
+      const term = state.searchTerm;
+      list = list.filter((p) => {
+        const searchableText = [
+          p.nome,
+          p.area,
+          p.inscricao,
+          p.descricao,
+          ...(p.tags || []).map((t) => t.texto),
+        ].join(' ').toLowerCase();
+
+        return searchableText.includes(term);
+      });
+    }
+
+    return list;
+  };
+
+  // ─── Rendering ──────────────────────────────────────────
+
+  /**
+   * Cria o elemento de badge da área com a cor correspondente.
+   * @param {string} area - Nome da área.
+   * @returns {HTMLElement}
+   */
+  const createAreaBadge = (area) => {
+    const config = state.areas[area] || { color: '#8a7da3' };
+    const badge = document.createElement('span');
+    badge.className = 'prof-area-badge';
+    badge.textContent = area;
+    badge.style.background = `${config.color}15`;
+    badge.style.color = config.color;
+    return badge;
+  };
+
+  /**
+   * Cria os elementos de tags coloridas.
+   * @param {Array<{texto: string, cor: string}>} tags - Tags do profissional.
+   * @returns {HTMLElement}
+   */
+  const createTagsContainer = (tags) => {
+    const container = document.createElement('div');
+    container.className = 'prof-tags';
+
+    (tags || []).forEach((tag) => {
+      const el = document.createElement('span');
+      el.className = 'prof-tag';
+      el.textContent = tag.texto;
+      el.style.background = `${tag.cor}18`;
+      el.style.color = tag.cor;
+      container.appendChild(el);
+    });
+
+    return container;
+  };
+
+  /**
+   * Retorna a inicial do nome para placeholder de foto.
+   * @param {string} nome - Nome completo.
+   * @returns {string} Inicial maiúscula.
+   */
+  const getInitial = (nome) => (nome ? nome.charAt(0).toUpperCase() : '?');
+
+  /**
+   * Cria o card de um profissional.
+   * @param {Object} prof - Dados do profissional.
+   * @param {number} index - Índice para animação escalonada.
+   * @returns {HTMLElement}
+   */
+  const createProfCard = (prof, index) => {
+    const card = document.createElement('article');
+    card.className = 'prof-card';
+    card.style.animationDelay = `${index * 0.06}s`;
+
+    // Header (foto + info)
+    const header = document.createElement('div');
+    header.className = 'prof-header';
+
+    const photoWrap = document.createElement('div');
+    photoWrap.className = 'prof-photo-wrap';
+
+    if (prof.fotoUrl) {
+      const img = document.createElement('img');
+      img.className = 'prof-photo';
+      img.src = prof.fotoUrl;
+      img.alt = `Foto de ${prof.nome}`;
+      img.loading = 'lazy';
+      img.onerror = () => {
+        const placeholder = document.createElement('div');
+        placeholder.className = 'prof-photo-placeholder';
+        placeholder.textContent = getInitial(prof.nome);
+        img.replaceWith(placeholder);
+      };
+      photoWrap.appendChild(img);
+    } else {
+      const placeholder = document.createElement('div');
+      placeholder.className = 'prof-photo-placeholder';
+      placeholder.textContent = getInitial(prof.nome);
+      photoWrap.appendChild(placeholder);
+    }
+
+    const info = document.createElement('div');
+    info.className = 'prof-info';
+
+    const name = document.createElement('h3');
+    name.className = 'prof-name';
+    name.textContent = prof.nome;
+
+    const badge = createAreaBadge(prof.area);
+
+    info.appendChild(name);
+    info.appendChild(badge);
+
+    if (prof.inscricao) {
+      const inscricao = document.createElement('div');
+      inscricao.className = 'prof-inscricao';
+      inscricao.textContent = prof.inscricao;
+      info.appendChild(inscricao);
+    }
+
+    header.appendChild(photoWrap);
+    header.appendChild(info);
+    card.appendChild(header);
+
+    // Tags
+    if (prof.tags && prof.tags.length > 0) {
+      card.appendChild(createTagsContainer(prof.tags));
+    }
+
+    // Descrição
+    if (prof.descricao) {
+      const descWrap = document.createElement('div');
+
+      const desc = document.createElement('div');
+      desc.className = 'prof-descricao prof-descricao-collapsed';
+      desc.textContent = prof.descricao;
+      descWrap.appendChild(desc);
+
+      // Verifica se o texto é longo o suficiente para truncar
+      // (será verificado após render com ResizeObserver ou requestAnimationFrame)
+      const expandBtn = document.createElement('button');
+      expandBtn.className = 'prof-expand-btn';
+      expandBtn.textContent = 'Ver mais';
+      expandBtn.style.display = 'none';
+
+      expandBtn.addEventListener('click', () => {
+        const isCollapsed = desc.classList.contains('prof-descricao-collapsed');
+        desc.classList.toggle('prof-descricao-collapsed', !isCollapsed);
+        expandBtn.textContent = isCollapsed ? 'Ver menos' : 'Ver mais';
+      });
+
+      descWrap.appendChild(expandBtn);
+      card.appendChild(descWrap);
+
+      // Após render, verifica se precisa do botão "Ver mais"
+      requestAnimationFrame(() => {
+        if (desc.scrollHeight > desc.clientHeight + 2) {
+          expandBtn.style.display = '';
+        }
+      });
+    }
+
+    return card;
+  };
+
+  /**
+   * Renderiza os cards na grid.
+   */
+  const renderCards = () => {
+    if (!dom.grid) return;
+
+    const filtered = getFilteredProfissionais();
+
+    dom.grid.innerHTML = '';
+
+    if (dom.resultsCount) {
+      dom.resultsCount.textContent = `${filtered.length} profissional${filtered.length !== 1 ? 'is' : ''}`;
+    }
+
+    if (filtered.length === 0) {
+      if (dom.emptyState) dom.emptyState.classList.remove('hidden');
+      return;
+    }
+
+    if (dom.emptyState) dom.emptyState.classList.add('hidden');
+
+    filtered.forEach((prof, i) => {
+      dom.grid.appendChild(createProfCard(prof, i));
+    });
+  };
+
+  // ─── Inicialização ──────────────────────────────────────
+
+  const showLoading = (show) => {
+    if (dom.loadingState) dom.loadingState.classList.toggle('hidden', !show);
+    if (dom.grid) dom.grid.classList.toggle('hidden', show);
+  };
+
+  const init = async () => {
+    initTheme();
+
+    // Event listeners
+    if (dom.themeToggle) dom.themeToggle.addEventListener('click', toggleTheme);
+    if (dom.searchInput) dom.searchInput.addEventListener('input', handleSearch);
+    if (dom.searchClear) dom.searchClear.addEventListener('click', clearSearch);
+    if (dom.filterToggle) dom.filterToggle.addEventListener('click', toggleFilterDropdown);
+    if (dom.filterSelectAll) dom.filterSelectAll.addEventListener('click', selectAllFilters);
+    if (dom.filterDeselectAll) dom.filterDeselectAll.addEventListener('click', deselectAllFilters);
+
+    // Fechar dropdown ao clicar fora
+    document.addEventListener('click', (e) => {
+      if (state.filterOpen && dom.filterDropdown && dom.filterToggle) {
+        const isInside = dom.filterDropdown.contains(e.target) || dom.filterToggle.contains(e.target);
+        if (!isInside) {
+          state.filterOpen = false;
+          dom.filterDropdown.classList.add('hidden');
+        }
+      }
+    });
+
+    // Carregar dados
+    showLoading(true);
+
+    try {
+      const [profResponse, areasResponse] = await Promise.all([
+        fetchPublicList(),
+        fetchAreas(),
+      ]);
+
+      if (areasResponse.success && areasResponse.data) {
+        state.areas = areasResponse.data;
+        // Inicializa todos os filtros como selecionados
+        Object.keys(state.areas).forEach((name) => state.filters.add(name));
+        buildFilterOptions();
+        updateFilterBtnState();
+      }
+
+      if (profResponse.success && profResponse.data) {
+        state.profissionais = profResponse.data;
+      } else {
+        showToast(profResponse.message || 'Erro ao carregar profissionais.', 'error');
+      }
+    } catch (err) {
+      console.error('[Public] Erro na inicialização:', err);
+      showToast('Erro ao conectar com o servidor.', 'error');
+    }
+
+    showLoading(false);
+    renderCards();
+  };
+
+  // ─── Start ──────────────────────────────────────────────
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+})();
