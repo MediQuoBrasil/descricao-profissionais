@@ -23,6 +23,7 @@
     filters: new Set(),
     searchTerm: '',
     filterOpen: false,
+    infoOpen: false,
   };
 
   // ─── DOM ────────────────────────────────────────────────
@@ -40,6 +41,8 @@
     filterSelectAll: $('#filterSelectAll'),
     filterDeselectAll: $('#filterDeselectAll'),
     resultsCount: $('#resultsCount'),
+    infoCountBtn: $('#infoCountBtn'),
+    infoCountPopover: $('#infoCountPopover'),
     themeToggle: $('#themeToggle'),
     loadingState: $('#loadingState'),
     emptyState: $('#emptyState'),
@@ -167,6 +170,16 @@
     }
   };
 
+  const toggleInfoPopover = () => {
+    state.infoOpen = !state.infoOpen;
+    if (dom.infoCountPopover) {
+      dom.infoCountPopover.classList.toggle('hidden', !state.infoOpen);
+    }
+    if (dom.infoCountBtn) {
+      dom.infoCountBtn.setAttribute('aria-expanded', String(state.infoOpen));
+    }
+  };
+
   // ─── Busca ──────────────────────────────────────────────
 
   const handleSearch = () => {
@@ -193,10 +206,8 @@
   const getFilteredProfissionais = () => {
     let list = state.profissionais;
 
-    // Filtro por área (se nenhuma selecionada, mostra todas)
-    if (state.filters.size > 0) {
-      list = list.filter((p) => state.filters.has(p.area));
-    }
+    // Filtro por área (nenhuma selecionada = nenhum resultado)
+    list = list.filter((p) => state.filters.has(p.area));
 
     // Filtro por busca
     if (state.searchTerm) {
@@ -375,7 +386,7 @@
     dom.grid.innerHTML = '';
 
     if (dom.resultsCount) {
-      dom.resultsCount.textContent = `${filtered.length} profissional${filtered.length !== 1 ? 'is' : ''}`;
+      dom.resultsCount.textContent = `${filtered.length} profissiona${filtered.length !== 1 ? 'is' : 'l'}`;
     }
 
     if (filtered.length === 0) {
@@ -407,14 +418,23 @@
     if (dom.filterToggle) dom.filterToggle.addEventListener('click', toggleFilterDropdown);
     if (dom.filterSelectAll) dom.filterSelectAll.addEventListener('click', selectAllFilters);
     if (dom.filterDeselectAll) dom.filterDeselectAll.addEventListener('click', deselectAllFilters);
+    if (dom.infoCountBtn) dom.infoCountBtn.addEventListener('click', toggleInfoPopover);
 
-    // Fechar dropdown ao clicar fora
+    // Fechar dropdown e popover ao clicar fora
     document.addEventListener('click', (e) => {
       if (state.filterOpen && dom.filterDropdown && dom.filterToggle) {
         const isInside = dom.filterDropdown.contains(e.target) || dom.filterToggle.contains(e.target);
         if (!isInside) {
           state.filterOpen = false;
           dom.filterDropdown.classList.add('hidden');
+        }
+      }
+      if (state.infoOpen && dom.infoCountPopover && dom.infoCountBtn) {
+        const isInside = dom.infoCountPopover.contains(e.target) || dom.infoCountBtn.contains(e.target);
+        if (!isInside) {
+          state.infoOpen = false;
+          dom.infoCountPopover.classList.add('hidden');
+          dom.infoCountBtn.setAttribute('aria-expanded', 'false');
         }
       }
     });
