@@ -204,6 +204,54 @@
   flex-shrink: 0;
 }
 
+.info-count-btn {
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-full);
+  border: 1.5px solid var(--color-border-hover);
+  background: var(--color-surface);
+  color: var(--color-text-dim);
+  font-family: var(--font-display);
+  font-size: 0.7rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all var(--transition-fast);
+  line-height: 1;
+}
+
+.info-count-btn:hover,
+.info-count-btn[aria-expanded="true"] {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+  background: rgba(var(--color-primary-rgb), 0.06);
+}
+
+.info-count-popover {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 1rem 1.1rem;
+  margin-top: 0.5rem;
+  box-shadow: var(--shadow-md);
+  animation: fadeSlideUp 0.2s ease;
+}
+
+.info-count-popover.hidden {
+  display: none;
+}
+
+.info-count-popover p {
+  font-family: var(--font-body);
+  font-size: 0.82rem;
+  color: var(--color-text-muted);
+  line-height: 1.65;
+  margin: 0;
+}
+
 /* ─── Dropdown de filtros ──────────────────────────────── */
 
 .filter-dropdown {
