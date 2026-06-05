@@ -44,6 +44,139 @@
     '#ec4899', '#14b8a6', '#8b5cf6', '#f97316',
   ];
 
+  // ─── Rascunho automático ──────────────────────────────────
+
+  /** @const {string} Chave do rascunho no localStorage. */
+  const DRAFT_KEY = 'prof_form_draft';
+
+  /** @const {number} Debounce em ms para salvar rascunho. */
+  const DRAFT_DEBOUNCE_MS = 800;
+
+  /**
+   * @typedef {Object} FormDraft
+   * @property {string} nome
+   * @property {string} area
+   * @property {string} inscricao
+   * @property {string} descricao
+   * @property {string} photoUrl
+   * @property {string} photoMode
+   * @property {Array<{texto: string, cor: string}>} tags
+   * @property {string} selectedTagColor
+   * @property {number} savedAt - Timestamp de quando o rascunho foi salvo.
+   */
+
+  /** @type {number|null} Timer do debounce de rascunho. */
+  let draftTimer = null;
+
+  /**
+   * Salva o estado atual do formulário como rascunho no localStorage.
+   * Só salva quando o modal está aberto e não está em modo de edição.
+   * @returns {void}
+   */
+  const saveDraft = () => {
+    // Não salvar rascunho para edições (só criação)
+    if (state.editingId) return;
+
+    const isModalOpen = dom.formModal && !dom.formModal.classList.contains('hidden');
+    if (!isModalOpen) return;
+
+    /** @type {FormDraft} */
+    const draft = {
+      nome: (dom.profNome?.value || '').trim(),
+      area: (dom.profArea?.value || '').trim(),
+      inscricao: (dom.profInscricao?.value || '').trim(),
+      descricao: (dom.profDescricao?.value || '').trim(),
+      photoUrl: (dom.photoUrlInput?.value || '').trim(),
+      photoMode: state.photoMode,
+      tags: state.formTags,
+      selectedTagColor: state.selectedTagColor,
+      savedAt: Date.now(),
+    };
+
+    // Não salvar se tudo estiver vazio
+    const hasContent = draft.nome || draft.area || draft.inscricao
+      || draft.descricao || draft.photoUrl || draft.tags.length > 0;
+    if (!hasContent) return;
+
+    try {
+      localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+    } catch (err) {
+      console.warn('[Draft] Falha ao salvar rascunho:', err.message);
+    }
+  };
+
+  /** Agenda salvamento de rascunho com debounce. */
+  const scheduleDraftSave = () => {
+    clearTimeout(draftTimer);
+    draftTimer = setTimeout(saveDraft, DRAFT_DEBOUNCE_MS);
+  };
+
+  /**
+   * Carrega rascunho do localStorage.
+   * @returns {FormDraft|null}
+   */
+  const loadDraft = () => {
+    try {
+      const raw = localStorage.getItem(DRAFT_KEY);
+      if (!raw) return null;
+      const draft = JSON.parse(raw);
+      // Descartar rascunhos com mais de 24h
+      if (draft.savedAt && Date.now() - draft.savedAt > 86400000) {
+        clearDraft();
+        return null;
+      }
+      return draft;
+    } catch {
+      return null;
+    }
+  };
+
+  /** Remove rascunho do localStorage. */
+  const clearDraft = () => {
+    clearTimeout(draftTimer);
+    try { localStorage.removeItem(DRAFT_KEY); } catch { /* ok */ }
+  };
+
+  /**
+   * Restaura dados de um rascunho nos campos do formulário.
+   * @param {FormDraft} draft
+   */
+  const restoreDraft = (draft) => {
+    if (dom.profNome) dom.profNome.value = draft.nome || '';
+    if (dom.profArea) dom.profArea.value = draft.area || '';
+    if (dom.profInscricao) dom.profInscricao.value = draft.inscricao || '';
+    if (dom.profDescricao) dom.profDescricao.value = draft.descricao || '';
+    if (dom.photoUrlInput) dom.photoUrlInput.value = draft.photoUrl || '';
+
+    state.formTags = Array.isArray(draft.tags) ? draft.tags : [];
+    state.selectedTagColor = draft.selectedTagColor || TAG_COLORS[0];
+    state.photoMode = draft.photoMode || 'url';
+
+    setPhotoMode(state.photoMode);
+    if (draft.photoUrl) {
+      state.photoPreviewUrl = draft.photoUrl;
+      updatePhotoPreview();
+    }
+    renderFormTags();
+    renderTagColorPicker();
+
+    console.info('[Draft] Rascunho restaurado.');
+  };
+
+  /**
+   * Verifica se o formulário tem conteúdo não salvo.
+   * @returns {boolean}
+   */
+  const isFormDirty = () => {
+    if (state.saving) return false;
+    const nome = (dom.profNome?.value || '').trim();
+    const inscricao = (dom.profInscricao?.value || '').trim();
+    const descricao = (dom.profDescricao?.value || '').trim();
+    const photoUrl = (dom.photoUrlInput?.value || '').trim();
+    return !!(nome || inscricao || descricao || photoUrl
+      || state.formTags.length > 0 || state.uploadedBase64);
+  };
+
   // ─── DOM ────────────────────────────────────────────────
 
   const $ = (sel) => document.querySelector(sel);
@@ -142,6 +275,44 @@
       el.classList.remove('show');
       setTimeout(() => { el.remove(); }, 400);
     }, 4000);
+  };
+
+  /**
+   * Toast especial para restauração de rascunho, com botão "Descartar".
+   * Tempo estendido (8s) para dar tempo do usuário decidir.
+   * @param {Function} onDiscard - Callback ao clicar "Descartar".
+   */
+  const showDraftRestoredToast = (onDiscard) => {
+    const existing = document.querySelector('.toast');
+    if (existing) existing.remove();
+
+    const el = document.createElement('div');
+    el.className = 'toast toast-success';
+    el.style.display = 'flex';
+    el.style.alignItems = 'center';
+    el.style.gap = '0.75rem';
+
+    const text = document.createElement('span');
+    text.textContent = 'Rascunho restaurado.';
+    el.appendChild(text);
+
+    const btn = document.createElement('button');
+    btn.textContent = 'Descartar';
+    btn.style.cssText = 'background:none;border:1px solid currentColor;color:inherit;padding:0.15rem 0.5rem;border-radius:4px;cursor:pointer;font-size:0.78rem;white-space:nowrap;';
+    btn.addEventListener('click', () => {
+      el.remove();
+      onDiscard();
+    });
+    el.appendChild(btn);
+
+    document.body.appendChild(el);
+    requestAnimationFrame(() => { el.classList.add('show'); });
+
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => {
+      el.classList.remove('show');
+      setTimeout(() => { el.remove(); }, 400);
+    }, 8000);
   };
 
   // ─── Sessão ─────────────────────────────────────────────
@@ -542,10 +713,30 @@
     if (dom.formModalTitle) dom.formModalTitle.textContent = 'Novo Profissional';
     resetFormFields();
     populateAreaSelect();
-    renderFormTags();
-    renderTagColorPicker();
-    setPhotoMode('url');
-    updatePhotoPreview();
+
+    // Verificar rascunho salvo
+    const draft = loadDraft();
+    if (draft) {
+      restoreDraft(draft);
+      showDraftRestoredToast(() => {
+        clearDraft();
+        resetFormFields();
+        state.formTags = [];
+        state.selectedTagColor = TAG_COLORS[0];
+        renderFormTags();
+        renderTagColorPicker();
+        setPhotoMode('url');
+        updatePhotoPreview();
+        showToast('Rascunho descartado.', 'success');
+      });
+      console.info('[Draft] Rascunho encontrado (salvo em %s). Restaurando.', new Date(draft.savedAt).toLocaleTimeString('pt-BR'));
+    } else {
+      renderFormTags();
+      renderTagColorPicker();
+      setPhotoMode('url');
+      updatePhotoPreview();
+    }
+
     openModal(dom.formModal);
   };
 
@@ -578,7 +769,24 @@
     openModal(dom.formModal);
   };
 
-  const closeFormModal = () => {
+  /**
+   * Fecha o modal do formulário. Se houver dados não salvos,
+   * pede confirmação e preserva o rascunho automaticamente.
+   * @param {boolean} [force=false] - Pular confirmação (usado após save com sucesso).
+   */
+  const closeFormModal = (force = false) => {
+    if (!force && !state.editingId && isFormDirty()) {
+      // Salvar rascunho imediato antes de pedir confirmação
+      saveDraft();
+      const shouldClose = window.confirm(
+        'Há dados não salvos. Seu rascunho foi preservado e será restaurado na próxima vez que abrir o formulário.\n\nDeseja fechar mesmo assim?',
+      );
+      if (!shouldClose) return;
+      console.info('[Draft] Modal fechado com rascunho preservado.');
+    } else if (force) {
+      // Save com sucesso — limpar rascunho
+      clearDraft();
+    }
     closeModal(dom.formModal);
   };
 
@@ -710,6 +918,7 @@
       removeBtn.addEventListener('click', () => {
         state.formTags.splice(i, 1);
         renderFormTags();
+        scheduleDraftSave();
       });
 
       el.appendChild(removeBtn);
@@ -740,6 +949,7 @@
     state.formTags.push({ texto, cor: state.selectedTagColor });
     input.value = '';
     renderFormTags();
+    scheduleDraftSave();
   };
 
   const renderTagColorPicker = () => {
@@ -780,6 +990,9 @@
   const handleSave = async () => {
     if (state.saving) return;
 
+    console.info('[Admin] handleSave: início. editingId=%s, photoMode=%s, uploadedBase64=%s, tags=%s',
+      state.editingId || '(novo)', state.photoMode, state.uploadedBase64 ? 'sim' : 'não', state.formTags.length);
+
     // Validação
     const nome = (dom.profNome?.value || '').trim();
     const area = (dom.profArea?.value || '').trim();
@@ -816,7 +1029,10 @@
       setFieldError('profDescricao', '');
     }
 
-    if (hasError) return;
+    if (hasError) {
+      console.warn('[Admin] handleSave: validação frontend falhou.');
+      return;
+    }
 
     state.saving = true;
     setSaveLoading(true);
@@ -827,8 +1043,10 @@
 
       if (state.photoMode === 'url') {
         fotoUrl = (dom.photoUrlInput?.value || '').trim();
+        console.info('[Admin] Foto via URL: "%s"', fotoUrl ? fotoUrl.substring(0, 60) : '(vazio)');
       } else if (state.uploadedBase64) {
         // Upload para Drive
+        console.info('[Admin] Foto via upload. mimeType=%s, base64.length=%s', state.uploadedMime, state.uploadedBase64?.length);
         const uploadResult = await uploadPhoto(
           state.session.sessionToken,
           state.uploadedBase64,
@@ -836,9 +1054,12 @@
           nome,
         );
 
+        console.info('[Admin] Upload resultado: success=%s, url=%s', uploadResult.success, uploadResult.data?.url?.substring(0, 60) || '(sem url)');
+
         if (uploadResult.success && uploadResult.data?.url) {
           fotoUrl = uploadResult.data.url;
         } else {
+          console.error('[Admin] Upload falhou: %s', uploadResult.message);
           showToast(uploadResult.message || 'Erro ao enviar foto.', 'error');
           state.saving = false;
           setSaveLoading(false);
@@ -847,6 +1068,9 @@
       } else if (state.editingId && state.photoPreviewUrl && !state.photoPreviewUrl.startsWith('data:')) {
         // Manter foto existente na edição
         fotoUrl = state.photoPreviewUrl;
+        console.info('[Admin] Mantendo foto existente: "%s"', fotoUrl.substring(0, 60));
+      } else {
+        console.info('[Admin] Sem foto selecionada.');
       }
 
       // 2. Montar dados
@@ -859,6 +1083,8 @@
         tags: state.formTags,
       };
 
+      console.info('[Admin] Enviando %s. fotoUrl=%s', state.editingId ? 'update' : 'create', fotoUrl ? fotoUrl.substring(0, 60) : '(vazio)');
+
       // 3. Criar ou atualizar
       let result;
       if (state.editingId) {
@@ -867,12 +1093,14 @@
         result = await createProf(state.session.sessionToken, data);
       }
 
+      console.info('[Admin] Resposta do backend: success=%s, message=%s', result.success, result.message || '(sem mensagem)');
+
       if (result.success) {
         showToast(
           state.editingId ? 'Profissional atualizado!' : 'Profissional cadastrado!',
           'success',
         );
-        closeFormModal();
+        closeFormModal(true);
         await loadProfissionais();
       } else if (result.message && result.message.includes('Sessão expirada')) {
         clearSession();
@@ -989,19 +1217,20 @@
     if (dom.adminFilterSelect) dom.adminFilterSelect.addEventListener('change', handleAdminFilter);
 
     // Modal form
-    if (dom.formClose) dom.formClose.addEventListener('click', closeFormModal);
-    if (dom.formCancel) dom.formCancel.addEventListener('click', closeFormModal);
+    if (dom.formClose) dom.formClose.addEventListener('click', () => closeFormModal());
+    if (dom.formCancel) dom.formCancel.addEventListener('click', () => closeFormModal());
     if (dom.formSave) dom.formSave.addEventListener('click', handleSave);
 
     // Foto tabs
     if (dom.photoTabUrl) dom.photoTabUrl.addEventListener('click', () => setPhotoMode('url'));
     if (dom.photoTabFile) dom.photoTabFile.addEventListener('click', () => setPhotoMode('file'));
 
-    // URL preview
+    // URL preview + draft save
     if (dom.photoUrlInput) {
       dom.photoUrlInput.addEventListener('input', () => {
         state.photoPreviewUrl = dom.photoUrlInput.value.trim();
         updatePhotoPreview();
+        scheduleDraftSave();
       });
     }
 
@@ -1045,18 +1274,27 @@
     }
     if (dom.tagColorHex) dom.tagColorHex.addEventListener('input', handleHexInput);
 
+    // Rascunho automático — campos de texto do formulário
+    [dom.profNome, dom.profInscricao, dom.profDescricao].forEach((el) => {
+      if (el) el.addEventListener('input', scheduleDraftSave);
+    });
+    if (dom.profArea) dom.profArea.addEventListener('change', scheduleDraftSave);
+
     // Confirm modal
     if (dom.confirmCancel) dom.confirmCancel.addEventListener('click', () => closeModal(dom.confirmModal));
     if (dom.confirmOk) dom.confirmOk.addEventListener('click', handleConfirmDelete);
 
     // Fechar modais com overlay click
-    [dom.formModal, dom.confirmModal].forEach((modal) => {
-      if (modal) {
-        modal.addEventListener('click', (e) => {
-          if (e.target === modal) closeModal(modal);
-        });
-      }
-    });
+    if (dom.formModal) {
+      dom.formModal.addEventListener('click', (e) => {
+        if (e.target === dom.formModal) closeFormModal();
+      });
+    }
+    if (dom.confirmModal) {
+      dom.confirmModal.addEventListener('click', (e) => {
+        if (e.target === dom.confirmModal) closeModal(dom.confirmModal);
+      });
+    }
 
     // Fechar modais com Escape
     document.addEventListener('keydown', (e) => {
@@ -1066,6 +1304,15 @@
         } else if (dom.confirmModal && !dom.confirmModal.classList.contains('hidden')) {
           closeModal(dom.confirmModal);
         }
+      }
+    });
+
+    // Proteção contra fechamento acidental da aba/janela
+    window.addEventListener('beforeunload', (e) => {
+      const isModalOpen = dom.formModal && !dom.formModal.classList.contains('hidden');
+      if (isModalOpen && isFormDirty()) {
+        saveDraft();
+        e.preventDefault();
       }
     });
   };
