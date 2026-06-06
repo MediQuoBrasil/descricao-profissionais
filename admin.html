@@ -216,6 +216,7 @@
       <!-- Tags -->
       <div class="tags-editor">
         <label class="field-label">Tags (especialidades, abordagens, demandas)</label>
+        <p class="field-hint">Arraste para reordenar · Duplo clique para editar</p>
         <div id="tagsListEdit" class="tags-list-edit">
           <!-- Tags renderizadas via JS -->
         </div>
@@ -227,6 +228,33 @@
           <!-- Swatches renderizados via JS -->
         </div>
         <input id="tagColorHex" class="tag-color-hex" type="text" placeholder="#7c3aed" maxlength="7" title="Cor HEX personalizada">
+      </div>
+
+      <!-- Tags Invisíveis -->
+      <div class="tags-editor tags-invisiveis-editor">
+        <label class="field-label">Tags Invisíveis (termos de busca ocultos)</label>
+        <p class="field-hint">Não aparecem no perfil público. Servem apenas para localizar o profissional na busca.</p>
+        <div id="tagsInvisiveisListEdit" class="tags-list-edit">
+          <!-- Tags invisíveis renderizadas via JS -->
+        </div>
+        <div class="tag-add-row">
+          <input id="tagInvisivelAddInput" class="tag-add-input" type="text" placeholder="Ex: Responsável técnico, Plantão…" autocomplete="off">
+          <button id="tagInvisivelAddBtn" class="btn btn-secondary btn-sm" type="button">+</button>
+        </div>
+      </div>
+
+      <!-- Indisponível -->
+      <div class="field-group field-group-toggle">
+        <label class="toggle-label" for="profIndisponivel">
+          <span class="toggle-switch">
+            <input id="profIndisponivel" type="checkbox">
+            <span class="toggle-slider"></span>
+          </span>
+          <span class="toggle-text">
+            <span class="toggle-title">Temporariamente indisponível para agendamento</span>
+            <span class="toggle-desc">Quando ativo, o profissional aparece com destaque vermelho no site público.</span>
+          </span>
+        </label>
       </div>
 
       <!-- Ações -->
