@@ -27,3 +27,18 @@ const AREAS = {
   'Treinadores': { label: 'Treinadores', color: '#d97706' },
   'Veterinária': { label: 'Veterinária', color: '#0891b2' },
 };
+
+/**
+ * Tipo de serviço por área de atuação.
+ * @const {Object<string, string>}
+ */
+const AREA_SERVICE_TYPE = {
+  'Clínica geral': 'Plantão',
+  'Dermatologia': 'Agendamento',
+  'Ginecologia': 'Agendamento',
+  'Nutrição': 'Agendamento',
+  'Psicologia': 'Agendamento',
+  'Psiquiatria': 'Avulso - R$ 149,90',
+  'Treinadores': 'Agendamento',
+  'Veterinária': 'Plantão',
+};
