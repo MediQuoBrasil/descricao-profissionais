@@ -17,7 +17,7 @@
 
   // ─── Estado ─────────────────────────────────────────────
 
-  /** @type {{ session: Object|null, profissionais: Array, areas: string[], searchTerm: string, filterArea: string, editingId: string|null, formTags: Array, selectedTagColor: string, photoMode: string, photoPreviewUrl: string, uploadedBase64: string|null, uploadedMime: string|null, saving: boolean }} */
+  /** @type {{ session: Object|null, profissionais: Array, areas: string[], searchTerm: string, filterArea: string, editingId: string|null, formTags: Array, formTagsInvisiveis: string[], selectedTagColor: string, photoMode: string, photoPreviewUrl: string, uploadedBase64: string|null, uploadedMime: string|null, saving: boolean, indisponivel: boolean, dragTagIndex: number|null }} */
   const state = {
     session: null,
     profissionais: [],
@@ -28,12 +28,15 @@
     filterArea: '',
     editingId: null,
     formTags: [],
+    formTagsInvisiveis: [],
     selectedTagColor: '#7c3aed',
     photoMode: 'url',
     photoPreviewUrl: '',
     uploadedBase64: null,
     uploadedMime: null,
     saving: false,
+    indisponivel: false,
+    dragTagIndex: null,
   };
 
   /** @const {string[]} Cores predefinidas para tags. */
@@ -62,6 +65,8 @@
    * @property {string} photoMode
    * @property {Array<{texto: string, cor: string}>} tags
    * @property {string} selectedTagColor
+   * @property {boolean} indisponivel
+   * @property {string[]} tagsInvisiveis
    * @property {number} savedAt - Timestamp de quando o rascunho foi salvo.
    */
 
@@ -90,6 +95,8 @@
       photoMode: state.photoMode,
       tags: state.formTags,
       selectedTagColor: state.selectedTagColor,
+      indisponivel: state.indisponivel,
+      tagsInvisiveis: state.formTagsInvisiveis,
       savedAt: Date.now(),
     };
 
@@ -151,13 +158,17 @@
     state.formTags = Array.isArray(draft.tags) ? draft.tags : [];
     state.selectedTagColor = draft.selectedTagColor || TAG_COLORS[0];
     state.photoMode = draft.photoMode || 'url';
+    state.indisponivel = draft.indisponivel === true;
+    state.formTagsInvisiveis = Array.isArray(draft.tagsInvisiveis) ? draft.tagsInvisiveis : [];
 
+    if (dom.profIndisponivel) dom.profIndisponivel.checked = state.indisponivel;
     setPhotoMode(state.photoMode);
     if (draft.photoUrl) {
       state.photoPreviewUrl = draft.photoUrl;
       updatePhotoPreview();
     }
     renderFormTags();
+    renderFormTagsInvisiveis();
     renderTagColorPicker();
 
     console.info('[Draft] Rascunho restaurado.');
@@ -174,7 +185,8 @@
     const descricao = (dom.profDescricao?.value || '').trim();
     const photoUrl = (dom.photoUrlInput?.value || '').trim();
     return !!(nome || inscricao || descricao || photoUrl
-      || state.formTags.length > 0 || state.uploadedBase64);
+      || state.formTags.length > 0 || state.formTagsInvisiveis.length > 0
+      || state.uploadedBase64);
   };
 
   // ─── DOM ────────────────────────────────────────────────
@@ -218,6 +230,10 @@
     tagAddBtn: $('#tagAddBtn'),
     tagColorPicker: $('#tagColorPicker'),
     tagColorHex: $('#tagColorHex'),
+    profIndisponivel: $('#profIndisponivel'),
+    tagsInvisiveisListEdit: $('#tagsInvisiveisListEdit'),
+    tagInvisivelAddInput: $('#tagInvisivelAddInput'),
+    tagInvisivelAddBtn: $('#tagInvisivelAddBtn'),
     confirmModal: $('#confirmModal'),
     confirmText: $('#confirmText'),
     confirmCancel: $('#confirmCancel'),
@@ -228,7 +244,7 @@
 
   const initTheme = () => {
     const saved = localStorage.getItem('theme');
-    const theme = (saved === 'light' || saved === 'dark') ? saved : 'light';
+    const theme = (saved === 'light' || saved === 'dark') ? saved : 'dark';
     document.documentElement.setAttribute('data-theme', theme);
     updateThemeIcon(theme);
   };
@@ -569,8 +585,15 @@
       ? Object.keys(AREAS)
       : state.areas;
 
-    (areasToShow || []).forEach((area) => {
-      if (area === '*') return;
+    const sorted = (areasToShow || []).filter((a) => a !== '*').slice().sort((a, b) => {
+      const ia = AREAS_ORDER.indexOf(a);
+      const ib = AREAS_ORDER.indexOf(b);
+      const oa = ia === -1 ? AREAS_ORDER.length : ia;
+      const ob = ib === -1 ? AREAS_ORDER.length : ib;
+      return oa - ob || a.localeCompare(b, 'pt-BR');
+    });
+
+    sorted.forEach((area) => {
       const opt = document.createElement('option');
       opt.value = area;
       opt.textContent = area;
@@ -583,18 +606,25 @@
    * @const {Object<string, string>}
    */
   const AREAS = {
-    'Psicologia': '#7c3aed',
+    'Clínica geral': '#2563eb',
+    'Dermatologia': '#e11d48',
+    'Ginecologia': '#db2777',
     'Nutrição': '#059669',
+    'Psicologia': '#7c3aed',
+    'Psiquiatria': '#6d28d9',
     'Treinadores': '#d97706',
     'Veterinária': '#0891b2',
-    'Clínica médica': '#2563eb',
-    'Ginecologia': '#db2777',
-    'Dermatologia': '#e11d48',
-    'Psiquiatria': '#6d28d9',
   };
 
   /**
+   * Ordem fixa das áreas para selects e filtros.
+   * @const {string[]}
+   */
+  const AREAS_ORDER = Object.keys(AREAS);
+
+  /**
    * Filtra profissionais pela busca e filtro de área.
+   * Resultado ordenado por área (ordem fixa) e nome (alfabético).
    * @returns {Array<Object>}
    */
   const getFilteredList = () => {
@@ -610,10 +640,21 @@
         const text = [
           p.nome, p.area, p.inscricao, p.descricao,
           ...(p.tags || []).map((t) => t.texto),
+          ...(p.tagsInvisiveis || []),
         ].join(' ').toLowerCase();
         return text.includes(term);
       });
     }
+
+    // Ordenação: área (ordem fixa) → nome (alfabético)
+    list.sort((a, b) => {
+      const ia = AREAS_ORDER.indexOf(a.area);
+      const ib = AREAS_ORDER.indexOf(b.area);
+      const oa = ia === -1 ? AREAS_ORDER.length : ia;
+      const ob = ib === -1 ? AREAS_ORDER.length : ib;
+      if (oa !== ob) return oa - ob;
+      return (a.nome || '').localeCompare(b.nome || '', 'pt-BR');
+    });
 
     return list;
   };
@@ -658,6 +699,11 @@
       const statusClass = isAtivo ? 'status-ativo' : 'status-inativo';
       const statusText = isAtivo ? 'Ativo' : 'Inativo';
 
+      // Indisponível
+      const unavailHtml = prof.indisponivel
+        ? '<span class="admin-item-status status-indisponivel">Indisponível</span>'
+        : '';
+
       item.innerHTML = `
         ${photoHtml}
         <div class="admin-item-info">
@@ -666,6 +712,7 @@
             <span class="admin-item-area-dot" style="background:${areaColor}"></span>
             <span>${escapeHtml(prof.area)}</span>
             <span class="admin-item-status ${statusClass}">${statusText}</span>
+            ${unavailHtml}
           </div>
         </div>
         <div class="admin-item-actions">
@@ -705,10 +752,12 @@
   const openNewForm = () => {
     state.editingId = null;
     state.formTags = [];
+    state.formTagsInvisiveis = [];
     state.photoPreviewUrl = '';
     state.uploadedBase64 = null;
     state.uploadedMime = null;
     state.selectedTagColor = TAG_COLORS[0];
+    state.indisponivel = false;
 
     if (dom.formModalTitle) dom.formModalTitle.textContent = 'Novo Profissional';
     resetFormFields();
@@ -722,8 +771,12 @@
         clearDraft();
         resetFormFields();
         state.formTags = [];
+        state.formTagsInvisiveis = [];
         state.selectedTagColor = TAG_COLORS[0];
+        state.indisponivel = false;
+        if (dom.profIndisponivel) dom.profIndisponivel.checked = false;
         renderFormTags();
+        renderFormTagsInvisiveis();
         renderTagColorPicker();
         setPhotoMode('url');
         updatePhotoPreview();
@@ -732,6 +785,7 @@
       console.info('[Draft] Rascunho encontrado (salvo em %s). Restaurando.', new Date(draft.savedAt).toLocaleTimeString('pt-BR'));
     } else {
       renderFormTags();
+      renderFormTagsInvisiveis();
       renderTagColorPicker();
       setPhotoMode('url');
       updatePhotoPreview();
@@ -747,10 +801,12 @@
   const openEditForm = (prof) => {
     state.editingId = prof.id;
     state.formTags = (prof.tags || []).map((t) => ({ ...t }));
+    state.formTagsInvisiveis = Array.isArray(prof.tagsInvisiveis) ? [...prof.tagsInvisiveis] : [];
     state.photoPreviewUrl = prof.fotoUrl || '';
     state.uploadedBase64 = null;
     state.uploadedMime = null;
     state.selectedTagColor = TAG_COLORS[0];
+    state.indisponivel = prof.indisponivel === true;
 
     if (dom.formModalTitle) dom.formModalTitle.textContent = 'Editar Profissional';
     resetFormFields();
@@ -761,8 +817,10 @@
     if (dom.profInscricao) dom.profInscricao.value = prof.inscricao || '';
     if (dom.profDescricao) dom.profDescricao.value = prof.descricao || '';
     if (dom.photoUrlInput) dom.photoUrlInput.value = prof.fotoUrl || '';
+    if (dom.profIndisponivel) dom.profIndisponivel.checked = state.indisponivel;
 
     renderFormTags();
+    renderFormTagsInvisiveis();
     renderTagColorPicker();
     setPhotoMode('url');
     updatePhotoPreview();
@@ -798,6 +856,8 @@
     if (dom.photoUrlInput) dom.photoUrlInput.value = '';
     if (dom.tagAddInput) dom.tagAddInput.value = '';
     if (dom.photoFileInput) dom.photoFileInput.value = '';
+    if (dom.profIndisponivel) dom.profIndisponivel.checked = false;
+    if (dom.tagInvisivelAddInput) dom.tagInvisivelAddInput.value = '';
 
     // Limpar erros
     $$('.field-error').forEach((el) => { el.textContent = ''; });
@@ -811,7 +871,15 @@
       ? Object.keys(AREAS)
       : state.areas.filter((a) => a !== '*');
 
-    areasToShow.forEach((area) => {
+    const sorted = areasToShow.slice().sort((a, b) => {
+      const ia = AREAS_ORDER.indexOf(a);
+      const ib = AREAS_ORDER.indexOf(b);
+      const oa = ia === -1 ? AREAS_ORDER.length : ia;
+      const ob = ib === -1 ? AREAS_ORDER.length : ib;
+      return oa - ob || a.localeCompare(b, 'pt-BR');
+    });
+
+    sorted.forEach((area) => {
       const opt = document.createElement('option');
       opt.value = area;
       opt.textContent = area;
@@ -898,6 +966,11 @@
 
   // ─── Tags Editor ─────────────────────────────────────────
 
+  /**
+   * Renderiza as tags no formulário com suporte a drag-and-drop e edição inline.
+   * - Arrastar: reordena a tag na posição desejada.
+   * - Duplo clique: abre edição inline do texto e permite trocar a cor.
+   */
   const renderFormTags = () => {
     if (!dom.tagsListEdit) return;
     dom.tagsListEdit.innerHTML = '';
@@ -905,25 +978,175 @@
     state.formTags.forEach((tag, i) => {
       const el = document.createElement('span');
       el.className = 'tag-edit-item';
+      el.draggable = true;
+      el.dataset.index = String(i);
       el.style.background = `${tag.cor}18`;
       el.style.color = tag.cor;
 
-      const text = document.createTextNode(tag.texto);
+      const text = document.createElement('span');
+      text.className = 'tag-edit-text';
+      text.textContent = tag.texto;
       el.appendChild(text);
 
       const removeBtn = document.createElement('button');
       removeBtn.className = 'tag-remove-btn';
       removeBtn.innerHTML = '✕';
       removeBtn.title = 'Remover tag';
-      removeBtn.addEventListener('click', () => {
+      removeBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
         state.formTags.splice(i, 1);
         renderFormTags();
         scheduleDraftSave();
       });
-
       el.appendChild(removeBtn);
+
+      // ─── Drag & Drop ─────────────
+      el.addEventListener('dragstart', (e) => {
+        state.dragTagIndex = i;
+        el.classList.add('tag-dragging');
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', String(i));
+      });
+
+      el.addEventListener('dragend', () => {
+        state.dragTagIndex = null;
+        el.classList.remove('tag-dragging');
+        $$('.tag-edit-item').forEach((t) => t.classList.remove('tag-drag-over'));
+      });
+
+      el.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        if (state.dragTagIndex !== null && state.dragTagIndex !== i) {
+          el.classList.add('tag-drag-over');
+        }
+      });
+
+      el.addEventListener('dragleave', () => {
+        el.classList.remove('tag-drag-over');
+      });
+
+      el.addEventListener('drop', (e) => {
+        e.preventDefault();
+        el.classList.remove('tag-drag-over');
+        const fromIndex = state.dragTagIndex;
+        if (fromIndex === null || fromIndex === i) return;
+
+        const moved = state.formTags.splice(fromIndex, 1)[0];
+        state.formTags.splice(i, 0, moved);
+        state.dragTagIndex = null;
+        renderFormTags();
+        scheduleDraftSave();
+      });
+
+      // ─── Duplo clique → edição inline ─────────────
+      el.addEventListener('dblclick', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        startTagInlineEdit(el, i);
+      });
+
       dom.tagsListEdit.appendChild(el);
     });
+  };
+
+  /**
+   * Inicia edição inline de uma tag (texto + cor).
+   * @param {HTMLElement} tagEl - Elemento da tag.
+   * @param {number} index - Índice da tag em state.formTags.
+   */
+  const startTagInlineEdit = (tagEl, index) => {
+    const tag = state.formTags[index];
+    if (!tag) return;
+
+    // Evita dupla edição
+    if (tagEl.querySelector('.tag-inline-edit')) return;
+
+    const textEl = tagEl.querySelector('.tag-edit-text');
+    const removeBtn = tagEl.querySelector('.tag-remove-btn');
+    if (textEl) textEl.style.display = 'none';
+    if (removeBtn) removeBtn.style.display = 'none';
+    tagEl.draggable = false;
+
+    const editWrap = document.createElement('span');
+    editWrap.className = 'tag-inline-edit';
+
+    // Swatch de cor clicável
+    const colorBtn = document.createElement('button');
+    colorBtn.className = 'tag-inline-color';
+    colorBtn.type = 'button';
+    colorBtn.style.background = tag.cor;
+    colorBtn.title = 'Alterar cor';
+    colorBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      showInlineColorPicker(tagEl, index, colorBtn);
+    });
+    editWrap.appendChild(colorBtn);
+
+    // Input de texto
+    const input = document.createElement('input');
+    input.className = 'tag-inline-input';
+    input.type = 'text';
+    input.value = tag.texto;
+    input.maxLength = 100;
+
+    const commitEdit = () => {
+      const newText = input.value.trim();
+      if (newText && newText !== tag.texto) {
+        state.formTags[index].texto = newText;
+        scheduleDraftSave();
+      }
+      renderFormTags();
+    };
+
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); commitEdit(); }
+      if (e.key === 'Escape') renderFormTags();
+    });
+    input.addEventListener('blur', (e) => {
+      // Não commitar se o foco foi para o color picker dentro da mesma tag
+      if (tagEl.contains(e.relatedTarget)) return;
+      commitEdit();
+    });
+
+    editWrap.appendChild(input);
+    tagEl.appendChild(editWrap);
+    input.focus();
+    input.select();
+  };
+
+  /**
+   * Mostra um mini color picker inline para trocar a cor de uma tag específica.
+   * @param {HTMLElement} tagEl - Elemento da tag.
+   * @param {number} index - Índice da tag.
+   * @param {HTMLElement} anchorBtn - Botão de cor que ancora o picker.
+   */
+  const showInlineColorPicker = (tagEl, index, anchorBtn) => {
+    // Remove picker anterior se existir
+    const existing = tagEl.querySelector('.tag-inline-picker');
+    if (existing) { existing.remove(); return; }
+
+    const picker = document.createElement('div');
+    picker.className = 'tag-inline-picker';
+
+    TAG_COLORS.forEach((color) => {
+      const sw = document.createElement('button');
+      sw.className = 'tag-inline-swatch';
+      sw.type = 'button';
+      sw.style.background = color;
+      sw.addEventListener('click', (e) => {
+        e.stopPropagation();
+        state.formTags[index].cor = color;
+        anchorBtn.style.background = color;
+        tagEl.style.background = `${color}18`;
+        tagEl.style.color = color;
+        picker.remove();
+        scheduleDraftSave();
+      });
+      picker.appendChild(sw);
+    });
+
+    tagEl.appendChild(picker);
   };
 
   const addTag = () => {
@@ -949,6 +1172,68 @@
     state.formTags.push({ texto, cor: state.selectedTagColor });
     input.value = '';
     renderFormTags();
+    scheduleDraftSave();
+  };
+
+  // ─── Tags Invisíveis Editor ──────────────────────────────
+
+  /**
+   * Renderiza as tags invisíveis no formulário.
+   */
+  const renderFormTagsInvisiveis = () => {
+    if (!dom.tagsInvisiveisListEdit) return;
+    dom.tagsInvisiveisListEdit.innerHTML = '';
+
+    state.formTagsInvisiveis.forEach((texto, i) => {
+      const el = document.createElement('span');
+      el.className = 'tag-edit-item tag-invisible-item';
+
+      const textNode = document.createElement('span');
+      textNode.className = 'tag-edit-text';
+      textNode.textContent = texto;
+      el.appendChild(textNode);
+
+      const removeBtn = document.createElement('button');
+      removeBtn.className = 'tag-remove-btn';
+      removeBtn.innerHTML = '✕';
+      removeBtn.title = 'Remover tag invisível';
+      removeBtn.addEventListener('click', () => {
+        state.formTagsInvisiveis.splice(i, 1);
+        renderFormTagsInvisiveis();
+        scheduleDraftSave();
+      });
+
+      el.appendChild(removeBtn);
+      dom.tagsInvisiveisListEdit.appendChild(el);
+    });
+  };
+
+  /**
+   * Adiciona uma tag invisível.
+   */
+  const addTagInvisivel = () => {
+    const input = dom.tagInvisivelAddInput;
+    if (!input) return;
+
+    const texto = input.value.trim();
+    if (!texto) return;
+
+    if (state.formTagsInvisiveis.length >= 20) {
+      showToast('Máximo de 20 tags invisíveis atingido.', 'error');
+      return;
+    }
+
+    const duplicate = state.formTagsInvisiveis.some(
+      (t) => t.toLowerCase() === texto.toLowerCase(),
+    );
+    if (duplicate) {
+      showToast('Tag invisível já existe.', 'error');
+      return;
+    }
+
+    state.formTagsInvisiveis.push(texto);
+    input.value = '';
+    renderFormTagsInvisiveis();
     scheduleDraftSave();
   };
 
@@ -1081,6 +1366,8 @@
         inscricao,
         descricao,
         tags: state.formTags,
+        indisponivel: dom.profIndisponivel?.checked === true,
+        tagsInvisiveis: state.formTagsInvisiveis,
       };
 
       console.info('[Admin] Enviando %s. fotoUrl=%s', state.editingId ? 'update' : 'create', fotoUrl ? fotoUrl.substring(0, 60) : '(vazio)');
@@ -1273,6 +1560,22 @@
       });
     }
     if (dom.tagColorHex) dom.tagColorHex.addEventListener('input', handleHexInput);
+
+    // Tags invisíveis
+    if (dom.tagInvisivelAddBtn) dom.tagInvisivelAddBtn.addEventListener('click', addTagInvisivel);
+    if (dom.tagInvisivelAddInput) {
+      dom.tagInvisivelAddInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          addTagInvisivel();
+        }
+      });
+    }
+
+    // Indisponível toggle
+    if (dom.profIndisponivel) {
+      dom.profIndisponivel.addEventListener('change', scheduleDraftSave);
+    }
 
     // Rascunho automático — campos de texto do formulário
     [dom.profNome, dom.profInscricao, dom.profDescricao].forEach((el) => {
