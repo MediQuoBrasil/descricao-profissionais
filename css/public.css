@@ -252,6 +252,76 @@
   margin: 0;
 }
 
+/* ─── Botão e Popover de Legenda ─────────────────────── */
+
+.legend-toggle-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.38rem 0.75rem;
+  font-family: var(--font-display);
+  font-size: 0.78rem;
+  font-weight: 600;
+  border: 1.5px solid var(--color-border);
+  border-radius: var(--radius-full);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.legend-toggle-btn:hover,
+.legend-toggle-btn[aria-expanded="true"] {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+  background: rgba(var(--color-primary-rgb), 0.06);
+}
+
+.legend-popover {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 1rem 1.1rem;
+  margin-top: 0.5rem;
+  box-shadow: var(--shadow-md);
+  animation: fadeSlideUp 0.2s ease;
+}
+
+.legend-popover.hidden {
+  display: none;
+}
+
+.legend-item {
+  margin-bottom: 0.85rem;
+}
+
+.legend-item:last-child {
+  margin-bottom: 0;
+}
+
+.legend-item-title {
+  font-family: var(--font-display);
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--color-text);
+  display: block;
+  margin-bottom: 0.2rem;
+}
+
+.legend-item p {
+  font-family: var(--font-body);
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+  line-height: 1.6;
+  margin: 0 0 0.3rem;
+}
+
+.legend-item p:last-child {
+  margin-bottom: 0;
+}
+
 /* ─── Dropdown de filtros ──────────────────────────────── */
 
 .filter-dropdown {
@@ -445,6 +515,10 @@
   padding: 0.2rem 0.55rem;
   border-radius: var(--radius-full);
   line-height: 1.2;
+}
+
+.prof-service-badge {
+  margin-left: 0.3rem;
 }
 
 .prof-inscricao {
