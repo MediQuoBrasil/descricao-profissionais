@@ -52,7 +52,7 @@
 
   const initTheme = () => {
     const saved = localStorage.getItem('theme');
-    const theme = (saved === 'light' || saved === 'dark') ? saved : 'light';
+    const theme = (saved === 'light' || saved === 'dark') ? saved : 'dark';
     document.documentElement.setAttribute('data-theme', theme);
     updateThemeIcon(theme);
   };
@@ -103,11 +103,33 @@
 
   // ─── Filtros ────────────────────────────────────────────
 
+  /**
+   * Ordem fixa das áreas para filtros e exibição.
+   * @const {string[]}
+   */
+  const AREAS_ORDER = [
+    'Clínica geral',
+    'Dermatologia',
+    'Ginecologia',
+    'Nutrição',
+    'Psicologia',
+    'Psiquiatria',
+    'Treinadores',
+    'Veterinária',
+  ];
+
   const buildFilterOptions = () => {
     if (!dom.filterOptions) return;
     dom.filterOptions.innerHTML = '';
 
     const areas = Object.entries(state.areas);
+    areas.sort(([a], [b]) => {
+      const ia = AREAS_ORDER.indexOf(a);
+      const ib = AREAS_ORDER.indexOf(b);
+      const oa = ia === -1 ? AREAS_ORDER.length : ia;
+      const ob = ib === -1 ? AREAS_ORDER.length : ib;
+      return oa - ob || a.localeCompare(b, 'pt-BR');
+    });
     areas.forEach(([name, config]) => {
       const option = document.createElement('label');
       option.className = `filter-option${state.filters.has(name) ? ' checked' : ''}`;
@@ -201,7 +223,8 @@
 
   /**
    * Filtra profissionais por áreas selecionadas e termo de busca.
-   * @returns {Array<Object>} Profissionais filtrados.
+   * Resultado ordenado por área (ordem fixa) e nome (alfabético).
+   * @returns {Array<Object>} Profissionais filtrados e ordenados.
    */
   const getFilteredProfissionais = () => {
     let list = state.profissionais;
@@ -209,7 +232,7 @@
     // Filtro por área (nenhuma selecionada = nenhum resultado)
     list = list.filter((p) => state.filters.has(p.area));
 
-    // Filtro por busca
+    // Filtro por busca (inclui tags invisíveis)
     if (state.searchTerm) {
       const term = state.searchTerm;
       list = list.filter((p) => {
@@ -219,11 +242,22 @@
           p.inscricao,
           p.descricao,
           ...(p.tags || []).map((t) => t.texto),
+          ...(p.tagsInvisiveis || []),
         ].join(' ').toLowerCase();
 
         return searchableText.includes(term);
       });
     }
+
+    // Ordenação: área (ordem fixa) → nome (alfabético)
+    list.sort((a, b) => {
+      const ia = AREAS_ORDER.indexOf(a.area);
+      const ib = AREAS_ORDER.indexOf(b.area);
+      const oa = ia === -1 ? AREAS_ORDER.length : ia;
+      const ob = ib === -1 ? AREAS_ORDER.length : ib;
+      if (oa !== ob) return oa - ob;
+      return (a.nome || '').localeCompare(b.nome || '', 'pt-BR');
+    });
 
     return list;
   };
@@ -281,7 +315,7 @@
    */
   const createProfCard = (prof, index) => {
     const card = document.createElement('article');
-    card.className = 'prof-card';
+    card.className = `prof-card${prof.indisponivel ? ' prof-card-unavailable' : ''}`;
     card.style.animationDelay = `${index * 0.06}s`;
 
     // Header (foto + info)
@@ -328,6 +362,14 @@
       inscricao.className = 'prof-inscricao';
       inscricao.textContent = prof.inscricao;
       info.appendChild(inscricao);
+    }
+
+    // Badge de indisponível
+    if (prof.indisponivel) {
+      const unavail = document.createElement('div');
+      unavail.className = 'prof-unavailable';
+      unavail.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg><span>Indisponível para agendamento</span>';
+      info.appendChild(unavail);
     }
 
     header.appendChild(photoWrap);
