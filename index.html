@@ -72,8 +72,36 @@
           </svg>
           <span class="filter-btn-label">Filtrar</span>
         </button>
+        <button id="legendToggleBtn" class="legend-toggle-btn" type="button" aria-expanded="false" aria-controls="legendPopover">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
+          </svg>
+          <span>Legenda</span>
+        </button>
         <span id="resultsCount" class="results-count" aria-live="polite"></span>
         <button id="infoCountBtn" class="info-count-btn" type="button" aria-label="Informações sobre a equipe" aria-expanded="false" aria-controls="infoCountPopover">?</button>
+      </div>
+
+      <!-- Popover de legenda -->
+      <div id="legendPopover" class="legend-popover hidden" role="tooltip">
+        <div class="legend-item">
+          <strong class="legend-item-title">Agendamento:</strong>
+          <p>São profissionais para os quais a consulta precisa ser marcada com antecedência. Eles não atendem por pronto atendimento.</p>
+        </div>
+        <div class="legend-item">
+          <strong class="legend-item-title">Plantão:</strong>
+          <p>São profissionais que atendem sem agendamento. Basta enviar mensagem para o profissional que estiver online (identificado pela bolinha verde) e você será atendido.</p>
+          <p>Em alguns casos, como na veterinária, o plantão pode ter dias e horários fixos. Nessa situação, o horário aparece destacado no perfil do profissional.</p>
+        </div>
+        <div class="legend-item">
+          <strong class="legend-item-title">Avulso – R$ 149,90:</strong>
+          <p>Nesse caso, o atendimento de psiquiatria funciona por agendamento, mas para marcar a consulta é necessário comprar o serviço separadamente, no valor de R$ 149,90.</p>
+          <p>Esse serviço não está incluído gratuitamente na sua licença.</p>
+        </div>
+        <div class="legend-item">
+          <strong class="legend-item-title">Temporariamente indisponível:</strong>
+          <p>Isso significa que, por algum motivo como problema de saúde, recesso ou outra situação excepcional, o profissional não está disponível no momento para agendamentos ou para realização de escala de plantão.</p>
+        </div>
       </div>
 
       <!-- Popover informativo -->
