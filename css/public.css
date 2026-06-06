@@ -454,6 +454,49 @@
   font-family: var(--font-body);
 }
 
+/* ─── Badge Indisponível ──────────────────────────────── */
+
+.prof-unavailable {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin-top: 0.4rem;
+  padding: 0.2rem 0.6rem;
+  font-family: var(--font-display);
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: #dc2626;
+  background: rgba(220, 38, 38, 0.08);
+  border: 1px solid rgba(220, 38, 38, 0.2);
+  border-radius: var(--radius-full);
+  line-height: 1.3;
+  animation: pulseUnavailable 3s ease-in-out infinite;
+}
+
+.prof-unavailable svg {
+  flex-shrink: 0;
+}
+
+@keyframes pulseUnavailable {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+[data-theme="dark"] .prof-unavailable {
+  color: #f87171;
+  background: rgba(248, 113, 113, 0.1);
+  border-color: rgba(248, 113, 113, 0.25);
+}
+
+/* Card com borda vermelha sutil quando indisponível */
+.prof-card.prof-card-unavailable {
+  border-color: rgba(220, 38, 38, 0.2);
+}
+
+[data-theme="dark"] .prof-card.prof-card-unavailable {
+  border-color: rgba(248, 113, 113, 0.2);
+}
+
 /* ─── Tags ─────────────────────────────────────────────── */
 
 .prof-tags {
