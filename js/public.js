@@ -48,6 +48,64 @@
     emptyState: $('#emptyState'),
   };
 
+  // ─── SWR Cache (localStorage) ─────────────────────────────
+
+  /** @const {string} Chave do cache local de profissionais. */
+  const SWR_CACHE_KEY = 'pub_profissionais_v1';
+
+  /** @const {number} Idade máxima do cache local em ms (24h). Após isso, trata como miss. */
+  const SWR_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
+  /**
+   * Lê dados do cache local (localStorage).
+   * @returns {{ data: Array<Object>, ts: number } | null} Cache ou null se vazio/expirado.
+   */
+  const getLocalCache = () => {
+    try {
+      const raw = localStorage.getItem(SWR_CACHE_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (!parsed.data || !Array.isArray(parsed.data) || parsed.data.length === 0) return null;
+      if (Date.now() - parsed.ts > SWR_MAX_AGE_MS) return null;
+      return parsed;
+    } catch {
+      return null;
+    }
+  };
+
+  /**
+   * Grava dados no cache local (localStorage).
+   * @param {Array<Object>} profissionais - Lista de profissionais.
+   * @returns {void}
+   */
+  const setLocalCache = (profissionais) => {
+    try {
+      localStorage.setItem(SWR_CACHE_KEY, JSON.stringify({
+        data: profissionais,
+        ts: Date.now(),
+      }));
+    } catch {
+      // Storage cheio — falha silenciosa, cache é best-effort.
+    }
+  };
+
+  // ─── Rendering Progressivo ────────────────────────────────
+
+  /** @const {number} Cards no primeiro batch em mobile (< 768px). */
+  const FIRST_BATCH_MOBILE = 2;
+
+  /** @const {number} Cards no primeiro batch em desktop (>= 768px). */
+  const FIRST_BATCH_DESKTOP = 4;
+
+  /** @const {number} Cards por chunk após o primeiro batch. */
+  const CHUNK_SIZE = 4;
+
+  /**
+   * Retorna o tamanho do primeiro batch baseado na largura da viewport.
+   * @returns {number}
+   */
+  const getFirstBatchSize = () => (window.innerWidth < 768 ? FIRST_BATCH_MOBILE : FIRST_BATCH_DESKTOP);
+
   // ─── Tema ───────────────────────────────────────────────
 
   const initTheme = () => {
@@ -418,10 +476,24 @@
   };
 
   /**
-   * Renderiza os cards na grid.
+   * ID do requestAnimationFrame pendente para cancelar se renderCards for chamada novamente.
+   * @type {number|null}
+   */
+  let pendingRenderRAF = null;
+
+  /**
+   * Renderiza os cards na grid com rendering progressivo.
+   * Primeiro batch (2 mobile / 4 desktop) renderizado imediatamente;
+   * restante em chunks via requestAnimationFrame para não bloquear a main thread.
    */
   const renderCards = () => {
     if (!dom.grid) return;
+
+    // Cancela chunks pendentes de render anterior (filtro/busca rápidos)
+    if (pendingRenderRAF !== null) {
+      cancelAnimationFrame(pendingRenderRAF);
+      pendingRenderRAF = null;
+    }
 
     const filtered = getFilteredProfissionais();
 
@@ -438,9 +510,36 @@
 
     if (dom.emptyState) dom.emptyState.classList.add('hidden');
 
-    filtered.forEach((prof, i) => {
-      dom.grid.appendChild(createProfCard(prof, i));
+    // ── Primeiro batch (imediato) ──
+    const batchSize = getFirstBatchSize();
+    const firstBatch = filtered.slice(0, batchSize);
+    const rest = filtered.slice(batchSize);
+
+    const fragment = document.createDocumentFragment();
+    firstBatch.forEach((prof, i) => {
+      fragment.appendChild(createProfCard(prof, i));
     });
+    dom.grid.appendChild(fragment);
+
+    // ── Restante em chunks (progressivo) ──
+    if (rest.length > 0) {
+      let offset = 0;
+      const renderChunk = () => {
+        const end = Math.min(offset + CHUNK_SIZE, rest.length);
+        const chunk = document.createDocumentFragment();
+        for (let i = offset; i < end; i += 1) {
+          chunk.appendChild(createProfCard(rest[i], batchSize + i));
+        }
+        dom.grid.appendChild(chunk);
+        offset = end;
+        if (offset < rest.length) {
+          pendingRenderRAF = requestAnimationFrame(renderChunk);
+        } else {
+          pendingRenderRAF = null;
+        }
+      };
+      pendingRenderRAF = requestAnimationFrame(renderChunk);
+    }
   };
 
   // ─── Inicialização ──────────────────────────────────────
@@ -481,35 +580,53 @@
       }
     });
 
-    // Carregar dados
-    showLoading(true);
+    // ── Áreas: inline do config.js, sem API call ──
+    state.areas = AREAS;
+    Object.keys(state.areas).forEach((name) => state.filters.add(name));
+    buildFilterOptions();
+    updateFilterBtnState();
 
-    try {
-      const [profResponse, areasResponse] = await Promise.all([
-        fetchPublicList(),
-        fetchAreas(),
-      ]);
+    // ── SWR: cache hit → render imediato, revalidate em background ──
+    const cached = getLocalCache();
 
-      if (areasResponse.success && areasResponse.data) {
-        state.areas = areasResponse.data;
-        // Inicializa todos os filtros como selecionados
-        Object.keys(state.areas).forEach((name) => state.filters.add(name));
-        buildFilterOptions();
-        updateFilterBtnState();
+    if (cached) {
+      // Cache hit — render instantâneo, sem spinner
+      state.profissionais = cached.data;
+      renderCards();
+
+      // Revalidate em background (sem retry agressivo — é best-effort)
+      fetchPublicList()
+        .then((res) => {
+          if (!res.success || !res.data) return;
+          const changed = JSON.stringify(res.data) !== JSON.stringify(state.profissionais);
+          setLocalCache(res.data);
+          if (changed) {
+            state.profissionais = res.data;
+            renderCards();
+          }
+        })
+        .catch(() => { /* falha silenciosa — já temos dados do cache */ });
+    } else {
+      // Cache miss — loading clássico
+      showLoading(true);
+
+      try {
+        const profResponse = await fetchPublicList();
+
+        if (profResponse.success && profResponse.data) {
+          state.profissionais = profResponse.data;
+          setLocalCache(profResponse.data);
+        } else {
+          showToast(profResponse.message || 'Erro ao carregar profissionais.', 'error');
+        }
+      } catch (err) {
+        console.error('[Public] Erro na inicialização:', err);
+        showToast('Erro ao conectar com o servidor.', 'error');
       }
 
-      if (profResponse.success && profResponse.data) {
-        state.profissionais = profResponse.data;
-      } else {
-        showToast(profResponse.message || 'Erro ao carregar profissionais.', 'error');
-      }
-    } catch (err) {
-      console.error('[Public] Erro na inicialização:', err);
-      showToast('Erro ao conectar com o servidor.', 'error');
+      showLoading(false);
+      renderCards();
     }
-
-    showLoading(false);
-    renderCards();
   };
 
   // ─── Start ──────────────────────────────────────────────
