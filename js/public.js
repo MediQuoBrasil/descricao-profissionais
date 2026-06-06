@@ -24,6 +24,7 @@
     searchTerm: '',
     filterOpen: false,
     infoOpen: false,
+    legendOpen: false,
   };
 
   // ─── DOM ────────────────────────────────────────────────
@@ -43,6 +44,8 @@
     resultsCount: $('#resultsCount'),
     infoCountBtn: $('#infoCountBtn'),
     infoCountPopover: $('#infoCountPopover'),
+    legendToggleBtn: $('#legendToggleBtn'),
+    legendPopover: $('#legendPopover'),
     themeToggle: $('#themeToggle'),
     loadingState: $('#loadingState'),
     emptyState: $('#emptyState'),
@@ -260,6 +263,16 @@
     }
   };
 
+  const toggleLegendPopover = () => {
+    state.legendOpen = !state.legendOpen;
+    if (dom.legendPopover) {
+      dom.legendPopover.classList.toggle('hidden', !state.legendOpen);
+    }
+    if (dom.legendToggleBtn) {
+      dom.legendToggleBtn.setAttribute('aria-expanded', String(state.legendOpen));
+    }
+  };
+
   // ─── Busca ──────────────────────────────────────────────
 
   const handleSearch = () => {
@@ -415,6 +428,15 @@
     info.appendChild(name);
     info.appendChild(badge);
 
+    // Badge do tipo de serviço (Agendamento / Plantão / Avulso)
+    const serviceType = AREA_SERVICE_TYPE[prof.area];
+    if (serviceType) {
+      const serviceBadge = createAreaBadge(prof.area);
+      serviceBadge.textContent = serviceType;
+      serviceBadge.className = 'prof-area-badge prof-service-badge';
+      info.appendChild(serviceBadge);
+    }
+
     if (prof.inscricao) {
       const inscricao = document.createElement('div');
       inscricao.className = 'prof-inscricao';
@@ -426,7 +448,7 @@
     if (prof.indisponivel) {
       const unavail = document.createElement('div');
       unavail.className = 'prof-unavailable';
-      unavail.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg><span>Indisponível para agendamento</span>';
+      unavail.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg><span>Temporariamente indisponível</span>';
       info.appendChild(unavail);
     }
 
@@ -560,6 +582,7 @@
     if (dom.filterSelectAll) dom.filterSelectAll.addEventListener('click', selectAllFilters);
     if (dom.filterDeselectAll) dom.filterDeselectAll.addEventListener('click', deselectAllFilters);
     if (dom.infoCountBtn) dom.infoCountBtn.addEventListener('click', toggleInfoPopover);
+    if (dom.legendToggleBtn) dom.legendToggleBtn.addEventListener('click', toggleLegendPopover);
 
     // Fechar dropdown e popover ao clicar fora
     document.addEventListener('click', (e) => {
@@ -576,6 +599,14 @@
           state.infoOpen = false;
           dom.infoCountPopover.classList.add('hidden');
           dom.infoCountBtn.setAttribute('aria-expanded', 'false');
+        }
+      }
+      if (state.legendOpen && dom.legendPopover && dom.legendToggleBtn) {
+        const isInside = dom.legendPopover.contains(e.target) || dom.legendToggleBtn.contains(e.target);
+        if (!isInside) {
+          state.legendOpen = false;
+          dom.legendPopover.classList.add('hidden');
+          dom.legendToggleBtn.setAttribute('aria-expanded', 'false');
         }
       }
     });
