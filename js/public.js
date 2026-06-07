@@ -179,6 +179,102 @@
   /** @type {number} Timestamp do último touchend para ignorar ghost click no handler de clique. */
   let lastTouchEndTime = 0;
 
+  // ─── Photo Zoom Hint (primeira visita) ──────────────────
+
+  /** @const {string} Chave do localStorage para controlar exibição da hint de zoom. */
+  const HINT_KEY = 'photo_zoom_hint_seen';
+
+  /** @type {HTMLElement|null} Referência ao elemento da hint ativa. */
+  let activeHint = null;
+
+  /** @type {number|null} Timer de auto-dismiss da hint. */
+  let hintAutoTimer = null;
+
+  /**
+   * Dispensa a hint de zoom e salva preferência no localStorage.
+   * Seguro para chamadas múltiplas (idempotente).
+   * @returns {void}
+   */
+  const dismissPhotoHint = () => {
+    if (!activeHint) return;
+
+    activeHint.classList.remove('active');
+
+    const target = dom.grid?.querySelector('.photo-hint-target');
+    if (target) target.classList.remove('photo-hint-target');
+
+    clearTimeout(hintAutoTimer);
+    hintAutoTimer = null;
+
+    try { localStorage.setItem(HINT_KEY, '1'); } catch { /* ok */ }
+
+    const el = activeHint;
+    activeHint = null;
+    setTimeout(() => el.remove(), 450);
+  };
+
+  /**
+   * Exibe a hint de zoom para visitantes de primeira vez.
+   * Detecta plataforma (touch vs mouse) e exibe texto adaptado.
+   * Adiciona ring pulsante na primeira foto para chamar atenção.
+   * @returns {void}
+   */
+  const showPhotoHint = () => {
+    try {
+      if (localStorage.getItem(HINT_KEY)) return;
+    } catch {
+      return;
+    }
+
+    // Só exibe se há pelo menos um card com foto real (não placeholder)
+    const firstImg = dom.grid?.querySelector('.prof-photo-wrap img');
+    const firstPhotoWrap = firstImg?.closest('.prof-photo-wrap');
+    if (!firstPhotoWrap) return;
+
+    const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+
+    // Ring pulsante na primeira foto
+    firstPhotoWrap.classList.add('photo-hint-target');
+
+    // Monta o hint card
+    const hint = document.createElement('div');
+    hint.className = 'photo-hint';
+    hint.setAttribute('role', 'status');
+    hint.setAttribute('aria-live', 'polite');
+
+    const text = isTouchDevice
+      ? 'Toque e segure na foto para expandir'
+      : 'Clique na foto para expandir';
+
+    hint.innerHTML = `
+      <span class="photo-hint-icon" aria-hidden="true">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="8"/>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          <line x1="11" y1="8" x2="11" y2="14"/>
+          <line x1="8" y1="11" x2="14" y2="11"/>
+        </svg>
+      </span>
+      <span class="photo-hint-text">${text}</span>
+      <button class="photo-hint-dismiss" type="button">Entendi</button>
+    `;
+
+    document.body.appendChild(hint);
+    activeHint = hint;
+
+    // Entrada animada (duplo rAF garante que o browser registra o estado inicial)
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        hint.classList.add('active');
+      });
+    });
+
+    hint.querySelector('.photo-hint-dismiss').addEventListener('click', dismissPhotoHint);
+
+    // Auto-dismiss após 12s (salva no localStorage igualmente)
+    hintAutoTimer = setTimeout(dismissPhotoHint, 12000);
+  };
+
   /**
    * Retorna (ou cria) o overlay singleton de zoom.
    * @returns {HTMLElement}
@@ -244,6 +340,9 @@
     overlay.classList.add('active');
     overlay.setAttribute('aria-hidden', 'false');
     document.body.style.overflow = 'hidden';
+
+    // Dispensa a hint se ativa (usuário descobriu o recurso)
+    dismissPhotoHint();
 
     // Haptic feedback sutil (Android)
     if (navigator.vibrate) {
@@ -831,6 +930,9 @@
       showLoading(false);
       renderCards();
     }
+
+    // Hint de zoom na foto (primeira visita)
+    setTimeout(showPhotoHint, 1000);
   };
 
   // ─── Start ──────────────────────────────────────────────
