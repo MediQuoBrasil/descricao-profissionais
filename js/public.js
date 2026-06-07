@@ -162,7 +162,7 @@
     }, 4000);
   };
 
-  // ─── Photo Zoom (mobile long-press) ──────────────────────
+  // ─── Photo Zoom (tap/click to expand) ────────────────────
 
   /** @const {number} Duração do toque longo para ativar zoom (ms). */
   const LONG_PRESS_MS = 300;
@@ -175,6 +175,9 @@
 
   /** @type {boolean} Se o zoom está ativo no momento. */
   let zoomActive = false;
+
+  /** @type {number} Timestamp do último touchend para ignorar ghost click no handler de clique. */
+  let lastTouchEndTime = 0;
 
   /**
    * Retorna (ou cria) o overlay singleton de zoom.
@@ -203,6 +206,18 @@
     zoomOverlay.appendChild(content);
     document.body.appendChild(zoomOverlay);
 
+    // Fecha ao clicar/tocar fora da foto circular
+    zoomOverlay.addEventListener('click', (e) => {
+      if (!e.target.closest('.photo-zoom-img')) {
+        hidePhotoZoom();
+      }
+    });
+
+    // Impede scroll do body enquanto overlay está visível (iOS)
+    zoomOverlay.addEventListener('touchmove', (e) => {
+      e.preventDefault();
+    }, { passive: false });
+
     return zoomOverlay;
   };
 
@@ -228,6 +243,7 @@
     zoomActive = true;
     overlay.classList.add('active');
     overlay.setAttribute('aria-hidden', 'false');
+    document.body.style.overflow = 'hidden';
 
     // Haptic feedback sutil (Android)
     if (navigator.vibrate) {
@@ -241,10 +257,14 @@
     zoomActive = false;
     zoomOverlay.classList.remove('active');
     zoomOverlay.setAttribute('aria-hidden', 'true');
+    document.body.style.overflow = '';
   };
 
   /**
-   * Configura o gesto de long-press em um wrapper de foto.
+   * Configura interação de zoom na foto.
+   * - Mobile: long-press (300ms) abre o zoom; permanece aberto ao soltar o dedo.
+   * - Desktop: clique simples abre o zoom.
+   * - Ambos: fecha ao clicar/tocar fora da foto no overlay.
    * @param {HTMLElement} photoWrap - Elemento `.prof-photo-wrap`.
    * @param {string} src - URL da foto.
    * @param {string} profNome - Nome do profissional.
@@ -252,6 +272,8 @@
   const setupPhotoLongPress = (photoWrap, src, profNome) => {
     let startX = 0;
     let startY = 0;
+
+    photoWrap.style.cursor = 'pointer';
 
     photoWrap.addEventListener('touchstart', (e) => {
       const touch = e.touches[0];
@@ -285,18 +307,28 @@
     photoWrap.addEventListener('touchend', () => {
       clearTimeout(longPressTimer);
       longPressTimer = null;
-      hidePhotoZoom();
+      lastTouchEndTime = Date.now();
+      // Zoom permanece aberto — fecha via overlay
     });
 
     photoWrap.addEventListener('touchcancel', () => {
       clearTimeout(longPressTimer);
       longPressTimer = null;
-      hidePhotoZoom();
+      lastTouchEndTime = Date.now();
     });
 
     // Previne menu de contexto (Android "Salvar imagem")
     photoWrap.addEventListener('contextmenu', (e) => {
       e.preventDefault();
+    });
+
+    // Desktop: clique simples abre o zoom
+    photoWrap.addEventListener('click', () => {
+      // Ignora ghost click que o browser dispara após touchend em mobile
+      if (Date.now() - lastTouchEndTime < 500) return;
+      if (!zoomActive) {
+        showPhotoZoom(src, profNome);
+      }
     });
   };
 
