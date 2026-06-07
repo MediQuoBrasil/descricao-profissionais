@@ -243,18 +243,10 @@
     hint.setAttribute('aria-live', 'polite');
 
     const text = isTouchDevice
-      ? 'Toque e segure na foto para expandir'
-      : 'Clique na foto para expandir';
+      ? 'Toque e segure na foto de um profissional para expandir (como no Instagram)'
+      : 'Clique na foto de um profissional para expandir';
 
     hint.innerHTML = `
-      <span class="photo-hint-icon" aria-hidden="true">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="11" cy="11" r="8"/>
-          <line x1="21" y1="21" x2="16.65" y2="16.65"/>
-          <line x1="11" y1="8" x2="11" y2="14"/>
-          <line x1="8" y1="11" x2="14" y2="11"/>
-        </svg>
-      </span>
       <span class="photo-hint-text">${text}</span>
       <button class="photo-hint-dismiss" type="button">Entendi</button>
     `;
