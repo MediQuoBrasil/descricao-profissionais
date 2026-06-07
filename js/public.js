@@ -162,6 +162,144 @@
     }, 4000);
   };
 
+  // ─── Photo Zoom (mobile long-press) ──────────────────────
+
+  /** @const {number} Duração do toque longo para ativar zoom (ms). */
+  const LONG_PRESS_MS = 300;
+
+  /** @type {HTMLElement|null} Overlay singleton (criado lazy). */
+  let zoomOverlay = null;
+
+  /** @type {number|null} Timer do long-press pendente. */
+  let longPressTimer = null;
+
+  /** @type {boolean} Se o zoom está ativo no momento. */
+  let zoomActive = false;
+
+  /**
+   * Retorna (ou cria) o overlay singleton de zoom.
+   * @returns {HTMLElement}
+   */
+  const getZoomOverlay = () => {
+    if (zoomOverlay) return zoomOverlay;
+
+    zoomOverlay = document.createElement('div');
+    zoomOverlay.className = 'photo-zoom-overlay';
+    zoomOverlay.setAttribute('aria-hidden', 'true');
+
+    const content = document.createElement('div');
+    content.className = 'photo-zoom-content';
+
+    const img = document.createElement('img');
+    img.className = 'photo-zoom-img';
+    img.alt = '';
+    img.draggable = false;
+
+    const name = document.createElement('span');
+    name.className = 'photo-zoom-name';
+
+    content.appendChild(img);
+    content.appendChild(name);
+    zoomOverlay.appendChild(content);
+    document.body.appendChild(zoomOverlay);
+
+    return zoomOverlay;
+  };
+
+  /**
+   * Exibe o zoom da foto no overlay.
+   * @param {string} src - URL da foto (Drive thumbnail).
+   * @param {string} profNome - Nome do profissional.
+   */
+  const showPhotoZoom = (src, profNome) => {
+    const overlay = getZoomOverlay();
+    const img = overlay.querySelector('.photo-zoom-img');
+    const nameEl = overlay.querySelector('.photo-zoom-name');
+
+    // Solicita resolução maior ao Drive para o zoom
+    const hiResSrc = src.includes('sz=w400')
+      ? src.replace('sz=w400', 'sz=w800')
+      : src;
+
+    img.src = hiResSrc;
+    img.alt = `Foto de ${profNome}`;
+    nameEl.textContent = profNome;
+
+    zoomActive = true;
+    overlay.classList.add('active');
+    overlay.setAttribute('aria-hidden', 'false');
+
+    // Haptic feedback sutil (Android)
+    if (navigator.vibrate) {
+      navigator.vibrate(10);
+    }
+  };
+
+  /** Oculta o overlay de zoom. */
+  const hidePhotoZoom = () => {
+    if (!zoomOverlay || !zoomActive) return;
+    zoomActive = false;
+    zoomOverlay.classList.remove('active');
+    zoomOverlay.setAttribute('aria-hidden', 'true');
+  };
+
+  /**
+   * Configura o gesto de long-press em um wrapper de foto.
+   * @param {HTMLElement} photoWrap - Elemento `.prof-photo-wrap`.
+   * @param {string} src - URL da foto.
+   * @param {string} profNome - Nome do profissional.
+   */
+  const setupPhotoLongPress = (photoWrap, src, profNome) => {
+    let startX = 0;
+    let startY = 0;
+
+    photoWrap.addEventListener('touchstart', (e) => {
+      const touch = e.touches[0];
+      startX = touch.clientX;
+      startY = touch.clientY;
+
+      clearTimeout(longPressTimer);
+      longPressTimer = setTimeout(() => {
+        showPhotoZoom(src, profNome);
+      }, LONG_PRESS_MS);
+    }, { passive: true });
+
+    photoWrap.addEventListener('touchmove', (e) => {
+      // Zoom já ativo — impede scroll sob o overlay
+      if (zoomActive) {
+        e.preventDefault();
+        return;
+      }
+      // Timer pendente — cancela se o dedo moveu > 10px (scroll)
+      if (longPressTimer) {
+        const touch = e.touches[0];
+        const dx = Math.abs(touch.clientX - startX);
+        const dy = Math.abs(touch.clientY - startY);
+        if (dx > 10 || dy > 10) {
+          clearTimeout(longPressTimer);
+          longPressTimer = null;
+        }
+      }
+    }, { passive: false });
+
+    photoWrap.addEventListener('touchend', () => {
+      clearTimeout(longPressTimer);
+      longPressTimer = null;
+      hidePhotoZoom();
+    });
+
+    photoWrap.addEventListener('touchcancel', () => {
+      clearTimeout(longPressTimer);
+      longPressTimer = null;
+      hidePhotoZoom();
+    });
+
+    // Previne menu de contexto (Android "Salvar imagem")
+    photoWrap.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+    });
+  };
+
   // ─── Filtros ────────────────────────────────────────────
 
   /**
@@ -409,6 +547,9 @@
         img.replaceWith(placeholder);
       };
       photoWrap.appendChild(img);
+
+      // Long-press zoom (mobile)
+      setupPhotoLongPress(photoWrap, prof.fotoUrl, prof.nome);
     } else {
       const placeholder = document.createElement('div');
       placeholder.className = 'prof-photo-placeholder';
