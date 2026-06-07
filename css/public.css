@@ -465,18 +465,19 @@
 }
 
 .prof-photo {
-  width: 72px;
-  height: 72px;
+  width: 88px;
+  height: 88px;
   border-radius: 50%;
   object-fit: cover;
   border: 2.5px solid var(--color-surface-2);
   box-shadow: var(--shadow-xs);
   background: var(--color-surface-2);
+  -webkit-touch-callout: none;
 }
 
 .prof-photo-placeholder {
-  width: 72px;
-  height: 72px;
+  width: 88px;
+  height: 88px;
   border-radius: 50%;
   background: linear-gradient(135deg, var(--color-surface-2), var(--color-surface-hover));
   display: flex;
@@ -484,7 +485,7 @@
   justify-content: center;
   color: var(--color-text-dim);
   font-family: var(--font-display);
-  font-size: 1.5rem;
+  font-size: 1.75rem;
   font-weight: 700;
   border: 2.5px solid var(--color-surface-2);
 }
@@ -686,14 +687,14 @@
   }
 
   .prof-photo {
-    width: 64px;
-    height: 64px;
+    width: 80px;
+    height: 80px;
   }
 
   .prof-photo-placeholder {
-    width: 64px;
-    height: 64px;
-    font-size: 1.3rem;
+    width: 80px;
+    height: 80px;
+    font-size: 1.6rem;
   }
 
   .prof-name {
@@ -721,4 +722,80 @@
   .prof-card {
     padding: 1.5rem;
   }
+
+  .prof-photo {
+    width: 96px;
+    height: 96px;
+  }
+
+  .prof-photo-placeholder {
+    width: 96px;
+    height: 96px;
+    font-size: 2rem;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   Photo Zoom — Mobile long-press (Instagram-style)
+   ═══════════════════════════════════════════════════════════ */
+
+.photo-zoom-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  pointer-events: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.photo-zoom-overlay.active {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.photo-zoom-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+
+.photo-zoom-img {
+  width: 280px;
+  height: 280px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 3px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 16px 64px rgba(0, 0, 0, 0.5);
+  transform: scale(0.5);
+  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.photo-zoom-overlay.active .photo-zoom-img {
+  transform: scale(1);
+}
+
+.photo-zoom-name {
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #fff;
+  text-align: center;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.4);
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity 0.25s ease 0.1s, transform 0.25s ease 0.1s;
+}
+
+.photo-zoom-overlay.active .photo-zoom-name {
+  opacity: 1;
+  transform: translateY(0);
 }
